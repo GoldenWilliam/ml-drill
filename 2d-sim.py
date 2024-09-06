@@ -39,8 +39,10 @@ y_index = 1
 htmp_2d = htmp_3d[:, y_index, :]
 htmp_2d_rot = np.rot90(htmp_2d)
 
+cbar_indices = [0, 1, 2, 3, 4, 5]
+
 plt.imshow(htmp_2d_rot, cmap='Set1', interpolation='nearest', extent=[0, 100, 0, 10])
-plt.colorbar(label='IC', boundaries=[0, 1, 2, 3, 4, 5], ticks=[0, 1, 2, 3, 4, 5])
+plt.colorbar(label='IC', boundaries=cbar_indices, ticks=cbar_indices)
 plt.xlabel('X[m]')
 plt.ylabel('Depth[m]')
 plt.grid(True)
@@ -64,7 +66,7 @@ masked_htmp_2d[:, col_min:col_max] = htmp_2d_rot[:, col_min:col_max]
 #Borehole plot
 plt.figure()
 plt.imshow(masked_htmp_2d, cmap='Set1', interpolation='nearest', extent=[0, 100, 0, 10])
-plt.colorbar(label='IC', boundaries=[0, 1, 2, 3, 4, 5], ticks=[0, 1, 2, 3, 4, 5])
+plt.colorbar(label='IC', boundaries=cbar_indices, ticks=cbar_indices)
 plt.xlabel('X[m]')
 plt.ylabel('Depth[m]')
 plt.title(f"Data Between x={x_min} and x={x_max}")
@@ -74,3 +76,7 @@ plt.yticks(np.arange(0, 11, 5))
 plt.show()
 
 print(masked_htmp_2d)
+print(htmp_2d_rot)
+
+def import_2d_env():
+    return htmp_2d_rot
