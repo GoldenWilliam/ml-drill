@@ -32,7 +32,7 @@ lith_type = np.reshape(lith_type, (resolution, resolution, resolution))
 scalar_values = scalar_field  # Replace this with your actual list of values
 
 p2d = gpv.plot_2d(geo_model, show_data=False, legend=False, show_boundaries=False, cell_number=[1], direction='y')
-
+plt.show()
 htmp_3d = lith_type
 y_index = 1
 
