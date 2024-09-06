@@ -4,15 +4,10 @@ import gempy_viewer as gpv
 import matplotlib.pyplot as plt
 from numpy import ma  # For masking
 
-data_orientations = 'orientations.csv'
-data_surface_points = 'surface_points.csv'
 
-resolution =25
 
 geo_model: gp.data.GeoModel = gp.create_geomodel(
-    project_name='Tutorial_ch1_1_Basics',
     extent=[0, 100, 0, 100, 0, 10],
-    resolution=[resolution,resolution,resolution],
     importer_helper=gp.data.ImporterHelper(
         path_to_orientations=data_orientations,
         path_to_surface_points=data_surface_points,
@@ -21,17 +16,10 @@ geo_model: gp.data.GeoModel = gp.create_geomodel(
     )
 )
 
-#plot = gpv.plot_2d(geo_model, show_lith=True, show_boundaries=False)
 sol = gp.compute_model(geo_model)
 
-scalar_field = sol.raw_arrays.scalar_field_matrix[0]
 lith_type = sol.raw_arrays.lith_block
-lith_type = np.reshape(lith_type, (resolution, resolution, resolution))
 
-# Example list of scalar values (e.g., 100x100 grid)
-scalar_values = scalar_field  # Replace this with your actual list of values
-
-p2d = gpv.plot_2d(geo_model, show_data=False, legend=False, show_boundaries=False, cell_number=[1], direction='y')
 plt.show()
 htmp_3d = lith_type
 y_index = 1
@@ -53,15 +41,12 @@ plt.show()
 
 # Define the x-range of interest
 x_min, x_max = 60, 70
-n_cols = htmp_2d_rot.shape[1]  # Number of columns data
 
 # Calculate the column indices
 col_min = int((x_min / 100) * n_cols)
 col_max = int((x_max / 100) * n_cols)
 
 # Create a masked array: data between col_min and col_max stays, the rest is masked
-masked_htmp_2d = ma.masked_array(htmp_2d_rot, mask=np.ones_like(htmp_2d_rot))
-masked_htmp_2d[:, col_min:col_max] = htmp_2d_rot[:, col_min:col_max]
 
 #Borehole plot
 plt.figure()
@@ -76,7 +61,3 @@ plt.yticks(np.arange(0, 11, 5))
 plt.show()
 
 print(masked_htmp_2d)
-print(htmp_2d_rot)
-
-def import_2d_env():
-    return htmp_2d_rot
