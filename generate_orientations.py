@@ -1,5 +1,6 @@
 import csv
 import numpy as np
+from sim2D import import_2d_env
 
 Id = range(0, 100)
 x = np.random.randint(1, 100, 3)
@@ -15,3 +16,4 @@ with open('orientations.csv', 'w') as file:
     writer = csv.writer(file)
     writer.writerow(('X', 'Y', 'Z', 'Azimuth', 'Dip', 'Polarity', 'Formation'))
     writer.writerows(zip(x, y, z, azimuth, dip, polarity, formation))
+

@@ -77,8 +77,6 @@ plt.show()
 
 print(masked_htmp_2d)
 
-
-
 def import_2d_env():
     return htmp_2d_rot
 
