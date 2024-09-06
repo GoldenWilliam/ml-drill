@@ -3,7 +3,6 @@ import gempy as gp
 import gempy_viewer as gpv
 import matplotlib.pyplot as plt
 from numpy import ma  # For masking
-from matplotlib.colors import ListedColormap
 
 data_orientations = 'orientations.csv'
 data_surface_points = 'surface_points.csv'
@@ -22,10 +21,6 @@ geo_model: gp.data.GeoModel = gp.create_geomodel(
     )
 )
 
-
-
-#geo_model.grid
-
 #plot = gpv.plot_2d(geo_model, show_lith=True, show_boundaries=False)
 sol = gp.compute_model(geo_model)
 
@@ -43,11 +38,6 @@ y_index = 1
 
 htmp_2d = htmp_3d[:, y_index, :]
 htmp_2d_rot = np.rot90(htmp_2d)
-unique_values = np.unique(htmp_2d_rot)
-
-cmap = plt.cm.viridis  # or any other colormap
-colors = cmap(np.linspace(0, 1, len(unique_values)))
-discrete_cmap = ListedColormap(colors)
 
 plt.imshow(htmp_2d_rot, cmap='Set1', interpolation='nearest', extent=[0, 100, 0, 10])
 plt.colorbar(label='IC', boundaries=[0, 1, 2, 3, 4, 5], ticks=[0, 1, 2, 3, 4, 5])
