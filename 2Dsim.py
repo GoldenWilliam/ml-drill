@@ -76,7 +76,10 @@ plt.yticks(np.arange(0, 11, 5))
 plt.show()
 
 print(masked_htmp_2d)
-print(htmp_2d_rot)
+
+
 
 def import_2d_env():
     return htmp_2d_rot
+
+print(import_2d_env())
