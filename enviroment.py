@@ -11,29 +11,26 @@ from load_training_data import GetTrainingFields
 
 
 class SoilEnvirment(gym.Env):
-    def __init__(self, real_field: np.array = None,f1: float = -0.5, f2: float = -1.0, starting_posision_x: int=0, training: bool = True):
+    def __init__(self, data: GetTrainingFields, f1: float = -1, f2: float = -3, starting_position_x: int=0):
         super(SoilEnvirment, self).__init__()
 
         # Set konstants
-        self.f1: float = f1
-        self.f2: float = f2
-        self.start_posision_x: int = starting_posision_x
+        self.f1 = f1
+        self.f2 = f2
+        self.start_position_x = starting_position_x
 
-        # Numer of steps we can move in from posision
-        self.steps_from_current_posision = [2,5,8,12,16]
+        # Set data
+        self.data = data
 
-        # Set the real field
-        self.real_field = real_field
-
-        # Set fields for training
-        self.training = training
-        self.id = -1
-        self.training_fields = GetTrainingFields().training_data
-        
+        # Number of steps we can move in from_position
+        self.steps_from_current_position = [2,5,8,12,16]
 
         # Define action and ans observation space
         self.action_space = spaces.Discrete(5)
-        self.observation_space = spaces.Box(low=-100,high=100,shape=(3,),dtype=np.float64)
+        self.observation_space = spaces.Box(low=0,high=6,shape=(3,),dtype=np.float64)
+
+        # For logging
+        self.rmse = 100
 
         
     def reset(self,seed=None):
@@ -43,50 +40,44 @@ class SoilEnvirment(gym.Env):
             seed = random.randint(0,10e5)
 
         # Simulate the fields
-        self.real_field = self.get_fields()
+        self.real_field = self.data.get_field()
         self.field_with_holes: np.array = np.full_like(self.real_field, 0)
         self.ip_field: np.array = None
-        self.current_posision: int = self.start_posision_x
+        self.current_position: int = self.start_position_x
         self.grid_size = self.real_field.shape
 
-        # Set holes
+        # Save holes and ic_values
         self.number_of_holes: int = 0
         self.x_coords = np.array([])
         self.y_coords = np.array([])
         self.ic_values = np.array([])
 
-        hole = self.get_hole(self.current_posision)
-
+        hole = self.get_hole(self.current_position)
 
         mean_ic: float = np.mean(hole)
         std_ic: float = np.std(hole)
 
-        return np.array([self.current_posision, mean_ic, std_ic]), {}
+        return np.array([self.current_position, mean_ic, std_ic]), {}
     
-    def get_fields(self):
-        if self.training:
-            if self.id >= len(self.training_fields)-1:
-                self.id = -1
-            self.id += 1
-            return self.training_fields[self.id]
-        return self.real_field
-
 
     def get_hole(self, hole_x: int): 
+
         # Checks if its out of bounds
         if self._is_done():
             return self.ip_field[:,-1]
         
+        # Get coords and ic values from the hole
         new_x_coords = np.ones(self.grid_size[0])*hole_x
         new_y_coords = np.linspace(0,self.grid_size[0],self.grid_size[0])
         new_ic_values = self.real_field[:,hole_x]
 
+        # Save coords and ic value
         self.x_coords = np.hstack((self.x_coords,new_x_coords))
         self.y_coords = np.hstack((self.y_coords,new_y_coords))
         self.ic_values = np.hstack((self.ic_values,new_ic_values))
 
-        
-        self.field_with_holes[:,hole_x] = self.real_field[:,hole_x]
+        # Digg hole
+        self.field_with_holes[:,hole_x] = new_ic_values
         self.number_of_holes += 1
         
 
@@ -94,63 +85,69 @@ class SoilEnvirment(gym.Env):
 
     def _is_done(self):        
         # Check is pososion out of grid
-        if self.current_posision >= self.grid_size[1]:
+        if self.current_position >= self.grid_size[1]:
             return True
         
         return False
     
     def _calc_reward(self):
-
         rmse = np.sqrt(np.mean((self.real_field - self.ip_field) ** 2))
-        reward = self.f1 * self.number_of_holes + self.f2 * rmse
-        return reward
+        reward = self.f1 * self.number_of_holes + self.f2 * self.rmse
+        return reward, rmse
 
 
     def step(self, action):
         # Gravet nytt hull
-        self.current_posision += self.steps_from_current_posision[action]
-        hole = self.get_hole(self.current_posision)
+        self.current_position += self.steps_from_current_position[action]
+        hole = self.get_hole(self.current_position)
 
         # Check truncated:
         truncated = self._is_done()
     
         # Interpolate field
-        self.ip_field = interpolate(self.x_coords,self.y_coords,self.ic_values,self.grid_size)
+        self.ip_field = interpolate(self.x_coords,self.y_coords,self.ic_values,self.grid_size,method="linear")
 
         # Caluclate reward
-        reward = self._calc_reward()
+        reward, rmse = self._calc_reward()
 
         # Update state
         mean_ic = np.mean(hole)
         std_ic = np.std(hole)
-        state = np.array([self.current_posision,mean_ic,std_ic])
+        state = np.array([self.current_position,mean_ic,std_ic])
 
         
         done = self._is_done()
 
-        return state, reward, done, truncated, {}
+        if done:
+            self.rmse = rmse
+
+        return state, reward, done, truncated, {"rmse": self.rmse}
 
 
     def render(self):
         # Create a figure and a set of subplots
         fig, ax = plt.subplots(3, 1, figsize=(6, 12))
 
+        # Max and min values in the plot
+        vmin = 0
+        vmax = 6
+
         # Plot the first zi on the first subplot
-        contour1 = ax[0].imshow(self.real_field,cmap='viridis', origin='lower')
+        contour1 = ax[0].imshow(self.real_field,cmap='viridis', origin='lower',vmin=vmin,vmax=vmax)
         ax[0].set_title('Original fiels')
         ax[0].set_xlabel('X-axis')
         ax[0].set_ylabel('Z-axis')
         fig.colorbar(contour1, ax=ax[0])
 
         # Plot the second zi on the second subplot
-        contour2 = ax[1].imshow(self.field_with_holes,cmap='viridis', origin='lower')
+        contour2 = ax[1].imshow(self.field_with_holes,cmap='viridis', origin='lower',vmin=vmin,vmax=vmax)
         ax[1].set_title('Field with holes')
         ax[1].set_xlabel('X-axis')
         ax[1].set_ylabel('Z-axis')
         fig.colorbar(contour2, ax=ax[1])
 
         # Plot the second zi on the second subplot
-        contour3 = ax[2].imshow(self.ip_field,cmap='viridis', origin='lower')
+        contour3 = ax[2].imshow(self.ip_field,cmap='viridis', origin='lower', vmin=vmin, vmax=vmax)
         ax[2].set_title('Interpolated Field')
         ax[2].set_xlabel('X-axis')
         ax[2].set_ylabel('Z-axis')
@@ -162,11 +159,12 @@ class SoilEnvirment(gym.Env):
         # Show the plots
         plt.show()
 
+# data = GetTrainingFields()
+# data.load_data("train_data_200_1.txt")
+# env = SoilEnvirment(data=data)
+# # check_env(env)
 
-env = SoilEnvirment()
-# check_env(env)
-
-# for _ in range(11):
+# for _ in range(2):
 #     obs, _ = env.reset()
 #     done = False
 #     while not done:
