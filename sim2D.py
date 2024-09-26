@@ -5,17 +5,15 @@ import matplotlib.pyplot as plt
 from numpy import ma  # For masking
 
 
-def import_2D_env(orientations_file: str, surface_points_file: str, resolution: int, show_gempy_plot: bool=False, show_regular_plot: bool=False):
+def import_2D_env(orientations_file: str, surface_points_file: str, resolution_XYZ: list, show_gempy_plot: bool=False, show_regular_plot: bool=False):
 
     data_orientations = orientations_file
     data_surface_points = surface_points_file
 
-    res = resolution
-
     geo_model: gp.data.GeoModel = gp.create_geomodel(
         project_name='Boreholes',
         extent=[0, 100, 0, 100, 0, 10],
-        resolution=[res,res,res],
+        resolution=[resolution_XYZ[0], resolution_XYZ[1], resolution_XYZ[2]],
         importer_helper=gp.data.ImporterHelper(
             path_to_orientations=data_orientations,
             path_to_surface_points=data_surface_points,
@@ -27,7 +25,7 @@ def import_2D_env(orientations_file: str, surface_points_file: str, resolution: 
     sol = gp.compute_model(geo_model)
 
     lith_type = sol.raw_arrays.lith_block
-    lith_type = np.reshape(lith_type, (res, res, res))
+    lith_type = np.reshape(lith_type, (resolution_XYZ[0], resolution_XYZ[1], resolution_XYZ[2]))
 
     if show_gempy_plot:
         gpv.plot_2d(geo_model, show_data=False, legend=False, show_boundaries=False, cell_number=[1], direction='y')
@@ -53,7 +51,12 @@ def import_2D_env(orientations_file: str, surface_points_file: str, resolution: 
 
     return htmp_2d_rot
 
-env2D = import_2D_env(orientations_file='orientations.csv', surface_points_file='surface_points.csv', resolution=25, show_gempy_plot=True, show_regular_plot=True)
+env2D = import_2D_env(
+    orientations_file='orientations.csv',
+    surface_points_file='surface_points.csv',
+    resolution_XYZ=[25, 25, 25],
+    show_gempy_plot=True,
+    show_regular_plot=True)
 
 # Define the x-range of interest
 x_min, x_max = 60, 70
