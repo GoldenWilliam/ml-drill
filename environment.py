@@ -1,11 +1,10 @@
-import matplotlib.pyplot as plt
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import random
 from stable_baselines3.common.env_checker import check_env
 import matplotlib.pyplot as plt
-from interpolater import interpolate
+from interpolator import interpolate
 from load_field_data import GetFields
 
 
