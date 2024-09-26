@@ -2,10 +2,10 @@ import numpy as np
 import gempy as gp
 import gempy_viewer as gpv
 import matplotlib.pyplot as plt
-from numpy import ma  # For masking
+from numpy import ma
 
 
-def import_2D_env(orientations_file: str, surface_points_file: str, resolution_XYZ: list, show_gempy_plot: bool=False, show_regular_plot: bool=False):
+def generate_2D_field(orientations_file: str, surface_points_file: str, resolution_XYZ: list, show_gempy_plot: bool=False, show_regular_plot: bool=False):
 
     data_orientations = orientations_file
     data_surface_points = surface_points_file
@@ -51,7 +51,7 @@ def import_2D_env(orientations_file: str, surface_points_file: str, resolution_X
 
     return htmp_2d_rot
 
-env2D = import_2D_env(
+env2D = generate_2D_field(
     orientations_file='orientations.csv',
     surface_points_file='surface_points.csv',
     resolution_XYZ=[25, 25, 25],
