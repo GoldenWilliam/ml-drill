@@ -2,7 +2,7 @@ import numpy as np
 from scipy.interpolate import griddata
 
 
-def interpolate(x: np.array, y: np.array, values : np.array, grid_size: tuple[int,int],method='nearest'):
+def interpolate(x: np.array, y: np.array, values : np.array, grid_size: tuple[int,int],method='nearest') -> np.ndarray:
     """
     Interpolates data from hole points (x, y) with corresponding values, and returns the interpolated grid.
 
@@ -27,6 +27,8 @@ def interpolate(x: np.array, y: np.array, values : np.array, grid_size: tuple[in
     # If we only have one x-coordinate
     if len(set(x)) == 1:
         return one_hole_interpolation(y,values,grid_size)
+    if len(x) == 0:
+        return np.zeros(grid_size)
     
     grid_x, grid_y = np.meshgrid(np.linspace(0,grid_size[1],grid_size[1]),np.linspace(0,grid_size[0],grid_size[0]))
     points = np.array(list(zip(x, y)))
@@ -36,15 +38,15 @@ def interpolate(x: np.array, y: np.array, values : np.array, grid_size: tuple[in
 
     ip_field = np.where(np.isnan(ip_linaer),ip_nearest,ip_linaer)
 
-    return ip_field
+    return np.round(ip_field)
    
-def one_hole_interpolation(y,values,grid_size):
-    ip_field = np.empty(grid_size)
+def one_hole_interpolation(y: np.ndarray, values: np.ndarray, grid_size: tuple[int,int]) -> np.ndarray:
+    ip_field = np.zeros(grid_size)
 
-    for y_i in y:
-        ip_field[int(y_i),:] = values
-
-    return ip_field.T
+    for i in range(len(y)):
+        ip_field[int(y[i]),:] = values[i]
+    
+    return ip_field
 
 
 

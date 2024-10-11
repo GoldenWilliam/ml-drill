@@ -8,10 +8,12 @@ from stable_baselines3.common.env_checker import check_env
 import matplotlib.pyplot as plt
 from interpolater import interpolate
 from load_field_data import GetFields
+from matplotlib.colors import BoundaryNorm
+from matplotlib import cm
 
 
 class SoilEnvirment(gym.Env):
-    def __init__(self, data: GetFields, f1: float = -1, f2: float = -3, starting_position_x: int=0) -> None:
+    def __init__(self, data: GetFields, f1: float = -0.3, f2: float = -10, starting_position_x: int=0) -> None:
         super(SoilEnvirment, self).__init__()
 
         # Set konstants
@@ -27,7 +29,7 @@ class SoilEnvirment(gym.Env):
 
         # Define action and ans observation space
         self.action_space = spaces.Discrete(5)
-        self.observation_space = spaces.Box(low=0,high=6,shape=(3,),dtype=np.float64)
+        self.observation_space = spaces.Box(low=0,high=100,shape=(3,),dtype=np.float64)
 
         # For logging
         self.rmse = 100
@@ -121,7 +123,7 @@ class SoilEnvirment(gym.Env):
         return state, reward, done, truncated, {"rmse": self._calc_rmse()}
 
 
-    def render(self) -> None:
+    def render(self,mode="human") -> None:
         # Create a figure and a set of subplots
         fig, ax = plt.subplots(3, 1, figsize=(6, 12))
 
@@ -129,27 +131,31 @@ class SoilEnvirment(gym.Env):
         vmin = 0
         vmax = 6
 
+        # Define colormap
+        cmap = cm.get_cmap("Set1",7)
+        norm = BoundaryNorm(np.arange(vmin,vmax+2), cmap.N)
+
         # Plot the first zi on the first subplot
-        contour1 = ax[0].imshow(self.real_field,cmap='viridis', origin='lower',vmin=vmin,vmax=vmax)
+        contour1 = ax[0].imshow(self.real_field,cmap=cmap,norm=norm, origin='lower')
         ax[0].set_title('Original fiels')
         ax[0].set_xlabel('X-axis')
         ax[0].set_ylabel('Z-axis')
-        fig.colorbar(contour1, ax=ax[0])
+        fig.colorbar(contour1, ax=ax[0], ticks=np.arange(7))
 
         # Plot the second zi on the second subplot
-        contour2 = ax[1].imshow(self.field_with_holes,cmap='viridis', origin='lower',vmin=vmin,vmax=vmax)
-        ax[1].set_title('Field with holes')
+        contour2 = ax[1].imshow(self.field_with_holes,cmap=cmap, norm=norm, origin='lower')
+        ax[1].set_title(f'Field with holes : {self.num_holes}')
         ax[1].set_xlabel('X-axis')
         ax[1].set_ylabel('Z-axis')
-        fig.colorbar(contour2, ax=ax[1])
+        fig.colorbar(contour2, ax=ax[1], ticks=np.arange(7))
 
         # Plot the second zi on the second subplot
-        contour3 = ax[2].imshow(np.round(self.ip_field),cmap='viridis', origin='lower', vmin=vmin, vmax=vmax)
+        contour3 = ax[2].imshow(np.round(self.ip_field),cmap=cmap, norm=norm, origin='lower')
         #contour3 = ax[2].imshow(np.round(self.ip_field),cmap='viridis', origin='lower', vmin=vmin, vmax=vmax)
         ax[2].set_title('Interpolated Field')
         ax[2].set_xlabel('X-axis')
         ax[2].set_ylabel('Z-axis')
-        fig.colorbar(contour3, ax=ax[2])
+        fig.colorbar(contour3, ax=ax[2], ticks=np.arange(7))
 
         # Adjust layout to avoid overlap
         plt.tight_layout()

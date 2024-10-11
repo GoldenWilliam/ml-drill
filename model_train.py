@@ -14,7 +14,7 @@ class CustumTensorboardCallback(BaseCallback):
     def _on_step(self) -> bool:
         infos = self.locals.get("infos",None)
         rmse = infos[0].get("rmse")
-        self.logger.record("testing/rmse",rmse)
+        self.logger.record_mean("testing/rmse",rmse)
         self.logger.dump(step=self.num_timesteps)
 
         return True
@@ -36,21 +36,23 @@ def train_model(model_id: str):
     data.load_data("data/train_data_2.txt")
     data.load_data("data/train_data_3.txt")
     data.load_data("data/train_data_4.txt")
+    data.load_data("data/train_data_5.txt")
+    data.load_data("data/train_data_6.txt")
     
     # Set up enviroment
-    env = SoilEnvirment(data=data, f1=-2, f2 = -5)
+    env = SoilEnvirment(data=data)
     env.reset()
 
     
     if model_id == "A2C":
         model = A2C("MlpPolicy",env,verbose=0,tensorboard_log=logdir)
     if model_id == "PPO":
-        model = PPO("MlpPolicy",env,verbose=0,tensorboard_log=logdir)
+        model = PPO("MlpPolicy",env,verbose=0,tensorboard_log=logdir, batch_size=25, n_steps=100)
     if model_id == "DQN":
         model = DQN("MlpPolicy",env,verbose=0,tensorboard_log=logdir, exploration_initial_eps=4)
 
     TIMESTEPS = 10000
-    for i in range(0,30):
+    for i in range(0,10):
         model.learn(total_timesteps=TIMESTEPS,
                     reset_num_timesteps=False,
                     tb_log_name=model_id,
@@ -62,9 +64,9 @@ def train_model(model_id: str):
 if __name__ == "__main__":
 
     p1 = mp.Process(target=train_model, args=("A2C",))
-    # p2 = mp.Process(target=train_model, args=("PPO",))
+    p2 = mp.Process(target=train_model, args=("PPO",))
     p3 = mp.Process(target=train_model, args=("DQN",))
 
     p1.start()
-    # p2.start()
+    p2.start()
     p3.start()
