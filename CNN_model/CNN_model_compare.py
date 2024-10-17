@@ -1,14 +1,19 @@
-# Compare models with eachother
+
+
+
+"""
+###### Kan kjørest for å sammenlikte rmse for de to modellene (den enkle og CNN) #######
+"""
 
 import sys
 import os
-module_path = os.path.abspath(os.path.join('..',r'C:\Users\Bruker\Documents\IN5490\git_project\ml-drill'))
+module_path = os.path.abspath(os.path.join('..',os.getcwd()))
 sys.path.append(module_path)
 
 from CNN_enviroment import SoilEnvirment as cnn_soil_env
 from enviroment import SoilEnvirment as soil_env
 from CNN_policy import policy_kwargs
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO, DQN, A2C
 from load_field_data import GetFields
 import numpy as np
 import torch as th
@@ -21,7 +26,7 @@ data1.load_data("data/train_data_6.txt")
 data2 = GetFields(train=False)
 data2.load_data("data/train_data_6.txt")
 
-print(data2.training_data[0]==data1.training_data[0])
+
 
 
 
@@ -32,11 +37,11 @@ env_norm = soil_env(data2)
 env_norm.reset()
 env_cnn.reset()
 
-model_cnn = PPO.load("CNN_model/models/PPO/30000", env=env_cnn)
+model_cnn = A2C.load("CNN_model/models/A2C/32000", env=env_cnn)
 model_norm = PPO.load("models/PPO/50000",env=env_norm)
 
 
-episodes = 10
+episodes = 200
 
 rmse_cnn = []
 hull_cnn = []
@@ -48,7 +53,7 @@ for ep in range(episodes):
     done = False
     t = False
     # print("Start")
-    while (not done) or (not t):
+    while (not done) and (not t):
         action, _states = model_cnn.predict(obs)
         #action = random.randint(0,49)
         obs, reward, done, t, info = env_cnn.step(action)

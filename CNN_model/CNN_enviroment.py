@@ -1,7 +1,8 @@
 
 import sys
 import os
-module_path = os.path.abspath(os.path.join('..',r'C:\Users\Bruker\Documents\IN5490\git_project\ml-drill'))
+
+module_path = os.path.abspath(os.path.join('..', os.getcwd()))
 sys.path.append(module_path)
 
 import matplotlib.pyplot as plt
@@ -18,7 +19,7 @@ from load_field_data import GetFields
 
 
 class SoilEnvirment(gym.Env):
-    def __init__(self, data: GetFields, f1: float = -1, f2: float = -10, rmse_threshold: float = 0.6) -> None:
+    def __init__(self, data: GetFields, f1: float = -1, f2: float = -10, rmse_threshold: float = 0.7) -> None:
         super(SoilEnvirment, self).__init__()
 
         # Set konstant
@@ -26,7 +27,7 @@ class SoilEnvirment(gym.Env):
         self.f2 = f2
         self.rmse_threshold = rmse_threshold
         self.max_num_holes = 10
-        self.max_numbers_actions = 15
+        self.max_numbers_actions = 30
 
         # Set data
         self.data = data
@@ -35,12 +36,12 @@ class SoilEnvirment(gym.Env):
         self.grid_size = self.data.get_field().shape
 
         # Define where in the grid the agen can digg
-        self.positions_in_env = np.arange(0,100,2)
+        self.positions_in_env = np.arange(0,100)
         
 
         # Define action and ans observation space
-        self.action_space = spaces.Discrete(50)
-        self.observation_space = spaces.Box(low=0,high=6,shape=(2,10,100),dtype=np.uint8)
+        self.action_space = spaces.Discrete(100)
+        self.observation_space = spaces.Box(low=0,high=255,shape=(1,10,100),dtype=np.uint8)
 
         
     def reset(self, seed: int | None = None):
@@ -72,7 +73,6 @@ class SoilEnvirment(gym.Env):
     
 
     def get_hole(self, hole_x: int) -> np.ndarray | None: 
-        self.num_holes += 1
 
         # Check if agent is digging the same hole
         if self.current_position in self.x_coords:
@@ -85,6 +85,7 @@ class SoilEnvirment(gym.Env):
         # Make position map
         self.position_map[:,hole_x] = 1
 
+        self.num_holes += 1
         # Save coords from hole
         self.x_coords = np.hstack((self.x_coords,np.full(self.grid_size[0], hole_x)))
         self.y_coords = np.hstack((self.y_coords,np.arange(self.grid_size[0])))
@@ -102,8 +103,8 @@ class SoilEnvirment(gym.Env):
             return True
         
         # Check for mac number of holes
-        if self.num_holes >= self.max_num_holes:
-            return True
+        # if self.num_holes >= self.max_num_holes:
+        #     return True
         
         return False
     
@@ -125,7 +126,7 @@ class SoilEnvirment(gym.Env):
     def _calc_reward(self) -> float:
         """Calculate reward"""
         rmse = max(self._calc_rmse(), 0.2)
-        same_action_penalty  = -5 if self.current_position in self.x_coords else 0
+        same_action_penalty  = -10 if self.current_position in self.x_coords else 0
         
         reward = self.f1 * self.num_holes + self.f2*rmse + same_action_penalty
 
@@ -138,7 +139,7 @@ class SoilEnvirment(gym.Env):
         if self.ip_field is not None:
             rmse =  np.sqrt(np.mean((self.real_field - self.ip_field) ** 2))
             return rmse
-        return 10
+        return 0
     
     def position_map(self) -> np.ndarray:
         position = np.zeros(self.grid_size)
@@ -152,7 +153,7 @@ class SoilEnvirment(gym.Env):
 
         # Check if we are doing the same position again
         if self.current_position == self.positions_in_env[action]:
-            reward = -15
+            reward = -100
             state = self.make_state()
             return state, reward, False, False, {"rmse" : self._calc_rmse(), "reward" : reward}
 
@@ -214,8 +215,18 @@ class SoilEnvirment(gym.Env):
         plt.show()
 
     def make_state(self):
-        """Makes a normalized obersvation"""
-        return np.array([self.ip_field,self.field_with_holes]).astype(np.uint8)
+        """Prøver å lage at  gjøre at matrisen har tall sprett mellom 0 og 255 så CNN-policy ikke klager"""
+        observation = np.copy(self.ip_field)
+        image_values = np.arange(0,255,255/7)
+        for i in range(7):
+            observation[observation == i] = image_values[i]
+
+        # Legger inn 0 der vi har gravet hull
+        for x in self.x_coords:
+            observation[:int(x)] = 0
+
+
+        return np.array([observation]).astype(np.uint8)
 
     # def resize_fields(self, fields):
     #     resized_obs = np.zeros((36,100))

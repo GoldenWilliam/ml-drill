@@ -1,27 +1,54 @@
 import sys
 import os
-module_path = os.path.abspath(os.path.join('..',r'C:\Users\Bruker\Documents\IN5490\git_project\ml-drill'))
+module_path = os.path.abspath(os.path.join('..',os.getcwd()))
 sys.path.append(module_path)
 
 import multiprocessing as mp
 from CNN_enviroment import SoilEnvirment
+from CNN_policy import policy_kwargs, init_weights
 from stable_baselines3 import DQN, A2C, PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from load_field_data import GetFields
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+import torch as th
+import torch.nn as nn
 
 
 class CustumTensorboardCallback(BaseCallback):
     """CallBack to log rmse"""
     def __init__(self, verbose: int = 0):
         super().__init__(verbose)
+
     
     def _on_step(self) -> bool:
         infos = self.locals.get("infos",None)
         rmse = infos[0].get("rmse")
-        self.logger.record_mean("testing/rmse",rmse)
+        reward = infos[0].get("reward")
+        self.logger.record("testing/rmse",rmse)
+        self.logger.record("testing/reward",reward)
         self.logger.dump(step=self.num_timesteps)
-
         return True
+    
+    def _on_episode_end(self) -> None:
+        # Get the 'infos' from the latest episode
+        infos = self.locals.get("infos", None)
+        
+        # Check if infos is available and contains the 'episode' key
+        if infos is not None and len(infos) > 0:
+            episode_info = infos[0].get("episode")
+            if episode_info is not None:
+                # Extract information such as total reward and episode length
+                episode_reward = episode_info.get("r")  # 'r' stands for total reward
+                episode_length = episode_info.get("l")  # 'l' stands for episode length
+
+                # Log episode-level metrics to TensorBoard
+                self.logger.record("episode/total_reward", episode_reward)
+                self.logger.record("episode/length", episode_length)
+
+            # Optionally, log custom metrics like RMSE if available in infos
+            rmse = infos[0].get("rmse")
+            if rmse is not None:
+                self.logger.record("testing/rmse", rmse)
     
 def train_model(model_id: str):
 
@@ -45,15 +72,17 @@ def train_model(model_id: str):
     
     # Set up enviroment
     env = SoilEnvirment(data=data)
+    # env = DummyVecEnv([lambda: env])
+    # env = VecNormalize(env, norm_obs=False, norm_reward=True)
     env.reset()
 
     
     if model_id == "A2C":
-        model = A2C("CnnPolicy",env,verbose=0,tensorboard_log=logdir)
+        model = A2C("CnnPolicy",env,verbose=0,tensorboard_log=logdir,policy_kwargs=policy_kwargs)
     if model_id == "PPO":
-        model = PPO("CnnPolicy",env,verbose=0,tensorboard_log=logdir, batch_size=25, n_steps=100)
+        model = PPO("CnnPolicy",env,verbose=0,tensorboard_log=logdir, batch_size=10, n_steps=40,policy_kwargs=policy_kwargs)
     if model_id == "DQN":
-        model = DQN("CnnPolicy",env,verbose=0,tensorboard_log=logdir, exploration_initial_eps=4)
+        model = DQN("CnnPolicy",env,verbose=0,tensorboard_log=logdir, exploration_initial_eps=4,policy_kwargs=policy_kwargs)
 
     TIMESTEPS = 1000
     for i in range(0,100):

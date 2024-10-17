@@ -38,7 +38,7 @@ def interpolate(x: np.array, y: np.array, values : np.array, grid_size: tuple[in
 
     ip_field = np.where(np.isnan(ip_linaer),ip_nearest,ip_linaer)
 
-    return np.round(ip_field)
+    return ip_field
    
 def one_hole_interpolation(y: np.ndarray, values: np.ndarray, grid_size: tuple[int,int]) -> np.ndarray:
     ip_field = np.zeros(grid_size)
