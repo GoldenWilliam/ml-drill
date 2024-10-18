@@ -97,7 +97,7 @@ def train_model(model_id: str, data_files: list, rmse_threshold: float = 20):
     data.load_data_from_file(data_files[0])  # Load the first file for environment setup
 
     # Set up environment
-    env = SoilEnvironment(data=data, f1=-2, f2=-5)
+    env = SoilEnvironment(data=data, weight_hole_number=-2, weight_accuracy=-5)
 
     if model_id == "A2C":
         model = A2C("CnnPolicy", env, policy_kwargs=policy_kwargs, verbose=0, tensorboard_log=logdir)
@@ -155,7 +155,6 @@ if __name__ == "__main__":
 
     p1.start()
     p1.join()
-
 
 
 
