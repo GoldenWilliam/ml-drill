@@ -8,7 +8,7 @@ from load_field_data import GetFields
 
 
 class SoilEnvironment(gym.Env):
-    def __init__(self, data: GetFields, weight_hole_number: float = -0.3, weight_accuracy: float = -10, starting_position_x: int = 0, rmse_threshold: float = 0.1) -> None:
+    def __init__(self, data: GetFields, weight_hole_number: float = -0.3, weight_accuracy: float = -10, starting_position_x: int = 0, rmse_threshold: float = 10) -> None:
         super(SoilEnvironment, self).__init__()
 
         # Set constants
@@ -29,10 +29,14 @@ class SoilEnvironment(gym.Env):
 
         # For logging
         self.rmse = 100
+        self.step_count = 0  # Initialize step count
 
     def reset(self, seed: int = None) -> tuple[np.ndarray, dict]:
         """Reset the environment to the initial state"""
         super().reset(seed=seed)
+
+        # Log that reset is being called
+        print("Environment reset, resetting step count to 0. Reset triggered due to episode end or explicit call.")
 
         # Simulate the fields
         self.real_field = self.data.get_field().astype(np.uint8)  # Ensure data is uint8 for RGB
@@ -49,6 +53,9 @@ class SoilEnvironment(gym.Env):
 
         # Get the initial hole
         hole = self.get_hole(self.current_position)
+
+        # Reset step count
+        self.step_count = 0
 
         # Convert (height, width, channels) to (channels, height, width)
         state = np.transpose(self.real_field, (2, 0, 1))
@@ -106,6 +113,9 @@ class SoilEnvironment(gym.Env):
         # Move according to the action, which is an index into the steps_from_current_position list
         step_size = self.steps_from_current_position[action]
 
+        # Increment step count
+        self.step_count += 1
+
         # Ensure the current position doesn't exceed the width of the field
         new_position = self.current_position + step_size
         if new_position >= self.grid_size[1]:
@@ -114,7 +124,9 @@ class SoilEnvironment(gym.Env):
         else:
             self.current_position = new_position
 
-        print(f"Taking step of size: {step_size}, current position: {self.current_position}")
+        # Print step number, step size, and current position
+        print(
+            f"Step number: {self.step_count}, taking step of size: {step_size}, current position: {self.current_position}")
 
         # Get a hole and move
         hole = self.get_hole(self.current_position)
@@ -130,23 +142,27 @@ class SoilEnvironment(gym.Env):
         reward = self._calc_reward()
         print(f"Reward calculated: {reward}, RMSE: {rmse}")
 
-        # Check if the episode is done based on RMSE threshold or reaching the end of the grid
-        if rmse < self.rmse_threshold:
+        # Check if the episode is done based on RMSE threshold
+        terminated = bool(rmse < self.rmse_threshold)
+        if terminated:
             print(f"Stopping episode as RMSE {rmse} is below the threshold {self.rmse_threshold}")
-            done = True
-        else:
-            done = False
 
         # Check if the agent has reached the end of the grid
-        truncated = self.current_position == self.grid_size[1] - 1
+        truncated = bool(self.current_position == self.grid_size[1] - 1)
         if truncated:
             print(f"Stopping episode as the agent has reached the last valid position: {self.current_position}")
-            done = True
+            terminated = True  # If truncated, the episode is also terminated
+
+        # Log the specific reset condition
+        if terminated:
+            print(f"Reset due to RMSE dropping below {self.rmse_threshold}.")
+        if truncated:
+            print(f"Reset due to reaching the last valid position: {self.current_position}.")
 
         # Convert (height, width, channels) to (channels, height, width)
         state = np.transpose(self.real_field, (2, 0, 1))
 
-        return state, reward, done, truncated, {"rmse": rmse}
+        return state, reward, terminated, truncated, {"rmse": rmse}
 
     def render(self, mode="human") -> None:
         # Create a figure and a set of subplots
@@ -174,7 +190,22 @@ data = GetFields()
 data.load_data_from_file("generate_simulated_fields/training_data/test_data_10_1.txt")
 
 env = SoilEnvironment(data=data)
+
+# Check the environment for issues
 check_env(env)
+
+# Test environment interaction with basic steps
+done = False
+state = env.reset()
+
+while not done:
+    action = env.action_space.sample()  # Random action for testing
+    state, reward, done, truncated, info = env.step(action)
+    if done or truncated:
+        print("Resetting due to done or truncated.")
+        state = env.reset()  # Reset only when done or truncated is True
+
+
 
 
 
