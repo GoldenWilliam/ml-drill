@@ -8,7 +8,7 @@ from load_field_data import GetFields
 
 
 class SoilEnvironment(gym.Env):
-    def __init__(self, data: GetFields, weight_hole_number: float = -0.3, weight_accuracy: float = -10, starting_position_x: int = 0, rmse_threshold: float = 10) -> None:
+    def __init__(self, data: GetFields, weight_hole_number: float = -0.3, weight_accuracy: float = -10, starting_position_x: int = 0, rmse_threshold: float = 0.1) -> None:
         super(SoilEnvironment, self).__init__()
 
         # Set constants
