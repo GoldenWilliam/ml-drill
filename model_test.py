@@ -1,5 +1,5 @@
 from stable_baselines3 import PPO, DQN, A2C
-from environment import SoilEnvirment
+from environment import SoilEnvironment
 from load_field_data import GetFields
 import os
 
@@ -9,23 +9,23 @@ parent_dir = os.path.dirname(current_dir)
 print(f"Parent directory: {parent_dir}")
 
 # Define model directory and path to load the model
-model_dir = "models"
-model_path = os.path.join(current_dir, model_dir, "A2C", "290000")
+model_dir = "models/DQN"
+model_path = os.path.join(current_dir, model_dir, "34/model_after_file_1.zip")
 
 # Load training data (Use the correct method 'load_data_from_file' instead of 'load_data')
 data = GetFields()
-data.load_data_from_file("data/train_data_10_1.txt")
+data.load_data_from_file('generate_simulated_fields/test_data/test_data_10_1.txt')
 
 # Set up the environment
-env = SoilEnvirment(data=data)
+env = SoilEnvironment(data=data, f1=-2, f2=-3)
 env.reset()
 
 # Load the pre-trained model
-model = A2C.load(model_path, env=env)
+model = DQN.load(model_path, env=env)
 print(f"Loaded model from {model_path}")
 
 # Define number of test episodes
-episodes = 10
+episodes = 2
 
 # Loop over each episode
 for ep in range(episodes):
@@ -55,3 +55,4 @@ for ep in range(episodes):
 
     # Optionally render the environment at the end of each episode
     env.render()
+

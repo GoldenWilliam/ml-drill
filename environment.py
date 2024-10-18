@@ -1,7 +1,6 @@
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
-import random
 from stable_baselines3.common.env_checker import check_env
 import matplotlib.pyplot as plt
 from interpolator import interpolate
@@ -9,27 +8,24 @@ from load_field_data import GetFields
 
 
 class SoilEnvironment(gym.Env):
-    def __init__(self, data: GetFields, f1: float = -1, f2: float = -3, starting_position_x: int = 0,
-                 starting_position_y: int = 0) -> None:
+    def __init__(self, data: GetFields, f1: float = -0.3, f2: float = -10, starting_position_x: int = 0, rmse_threshold: float = 0.1) -> None:
         super(SoilEnvironment, self).__init__()
 
         # Set constants
         self.f1 = f1
         self.f2 = f2
         self.start_position_x = starting_position_x
-        self.start_position_y = starting_position_y
+        self.rmse_threshold = rmse_threshold  # Stop condition based on RMSE
 
         # Set data
         self.data = data
 
-        # Number of steps we can move in from_position (in x and y directions)
-        self.steps_from_current_position = [2, 5, 8, 12, 16]
+        # Action space: Steps from 1 to 40
+        self.steps_from_current_position = list(range(1, 81))  # Steps between 1 and 40
+        self.action_space = spaces.Discrete(len(self.steps_from_current_position))
 
-        # Define action and observation space: Move in 4 directions (up, down, left, right)
-        self.action_space = spaces.Discrete(4)  # 4 possible moves (up, down, left, right)
-
-        # Observation space to handle 3x3 patches from the field
-        self.observation_space = spaces.Box(low=0, high=255, shape=(9,), dtype=np.float64)
+        # Define observation space (same as before)
+        self.observation_space = spaces.Box(low=0, high=255, shape=(80, 805, 3), dtype=np.uint8)
 
         # For logging
         self.rmse = 100
@@ -39,115 +35,112 @@ class SoilEnvironment(gym.Env):
         super().reset(seed=seed)
 
         # Simulate the fields
-        self.real_field = self.data.get_field()  # Assume this returns a 2D or 3D array
-        self.field_with_holes = np.full_like(self.real_field, 0)
-        self.ip_field = np.full_like(self.real_field, 0)
-        self.current_position_x = self.start_position_x
-        self.current_position_y = self.start_position_y
+        self.real_field = self.data.get_field().astype(np.uint8)  # Ensure data is uint8 for RGB
+        self.field_with_holes = np.full_like(self.real_field, 0, dtype=np.uint8)
+        self.ip_field = np.full_like(self.real_field, 0, dtype=np.float32)  # Keep interpolation in float32
+        self.current_position = self.start_position_x
         self.grid_size = self.real_field.shape
 
         # Save holes and ic_values
         self.num_holes = 0
-        self.x_coords = np.array([])
-        self.y_coords = np.array([])
-        self.ic_values = np.array([])
+        self.x_coords = np.array([], dtype=np.float32)
+        self.y_coords = np.array([], dtype=np.float32)
+        self.ic_values = np.array([], dtype=np.float32)
 
-        # Get initial observation (3x3 sub-array at current position)
-        observation = self.get_hole(self.current_position_x, self.current_position_y)
+        # Get the initial hole
+        hole = self.get_hole(self.current_position)
 
-        return observation, {}
+        return self.real_field, {}
 
-    def get_hole(self, hole_x: int, hole_y: int) -> np.ndarray:
-        """Dig a 'hole' at the specified x, y position. Return a 3x3 patch of the field."""
-        # Define a 3x3 region (or patch) around the current position
-        patch_x_min = max(0, hole_x - 1)
-        patch_x_max = min(self.grid_size[1], hole_x + 2)
-        patch_y_min = max(0, hole_y - 1)
-        patch_y_max = min(self.grid_size[0], hole_y + 2)
+    def get_hole(self, hole_x: int) -> np.ndarray:
+        """Return the full RGB data (80 pixels deep) at the specified x position."""
+        if self._is_done():
+            return np.zeros((80, 805, 3), dtype=np.uint8)  # Return zeros if out of bounds
 
-        # Extract the patch (it could be smaller than 3x3 at edges)
-        hole = self.real_field[patch_y_min:patch_y_max, patch_x_min:patch_x_max]
+        # Save coords from hole
+        self.x_coords = np.hstack((self.x_coords, np.full(self.grid_size[0], hole_x)))
+        self.y_coords = np.hstack((self.y_coords, np.arange(self.grid_size[0])))
 
-        # If the patch is smaller than 3x3 (near the borders), pad it to fit 3x3
-        hole = np.pad(hole, ((max(0, 1 - hole_y), max(0, (hole_y + 2) - self.grid_size[0])),
-                             (max(0, 1 - hole_x), max(0, (hole_x + 2) - self.grid_size[1]))),
-                      mode='constant')
+        # Collect RGB values for interpolation
+        rgb_values = self.real_field[:, hole_x, :]
+        self.ic_values = np.vstack((self.ic_values, rgb_values)) if self.ic_values.size else rgb_values
 
-        # Save coordinates and values of the 'hole' (sub-array)
-        self.x_coords = np.hstack((self.x_coords, np.full(hole.shape[1], hole_x)))
-        self.y_coords = np.hstack((self.y_coords, np.arange(patch_y_min, patch_y_max)))
-        self.ic_values = np.hstack((self.ic_values, hole.flatten()))
-
-        # Dig hole in the field (only update the parts of field_with_holes that overlap)
-        self.field_with_holes[patch_y_min:patch_y_max, patch_x_min:patch_x_max] = hole
-
+        # Dig the hole
+        self.field_with_holes[:, hole_x, :] = self.real_field[:, hole_x, :]
         self.num_holes += 1
 
-        # Flatten the hole for observation and return
-        return hole.flatten()
+        return self.field_with_holes
 
     def _is_done(self) -> bool:
-        """Check if the position is out of the grid"""
-        if self.current_position_x >= self.grid_size[1] or self.current_position_y >= self.grid_size[0]:
-            return True
-        return False
+        # Check if position is out of grid
+        return self.current_position >= self.grid_size[1]
 
     def _calc_reward(self) -> float:
-        """Calculate the reward"""
-        reward = self.f1 * self.num_holes + self.f2 * self._calc_rmse()
+        """Calculate the reward, balancing fewer holes and better interpolation."""
+        # Normalize RMSE to range [0, 1]
+        max_rmse = 120  # Example value, adjust based on your data
+        normalized_rmse = min(self._calc_rmse() / max_rmse, 1.0)
+
+        # Adjust reward scaling
+        hole_penalty = self.f1 * self.num_holes  # Penalize digging more holes
+        accuracy_reward = 100*(1 - normalized_rmse)  # Reward for better accuracy
+
+        # Combine penalties and rewards
+        reward = accuracy_reward + hole_penalty
+
         return reward
 
     def _calc_rmse(self) -> float:
         """Calculate RMSE of interpolated field"""
         if self.ip_field is not None:
-            rmse = np.sqrt(np.mean((self.real_field - self.ip_field) ** 2))
+            rmse = np.sqrt(np.mean((self.real_field.astype(np.float32) - self.ip_field) ** 2))
             return rmse
         return 10e2
 
     def step(self, action: int) -> tuple[np.ndarray, float, bool, bool, dict]:
-        """Take a step in the environment based on the action (0=up, 1=down, 2=left, 3=right)"""
+        """Take a step in the environment based on the discrete action."""
+        # Move according to the action, which is an index into the steps_from_current_position list
+        step_size = self.steps_from_current_position[action]
+        self.current_position += step_size
 
-        # Move based on action (up, down, left, right)
-        if action == 0:  # Move up
-            self.current_position_y = max(0, self.current_position_y - self.steps_from_current_position[1])
-        elif action == 1:  # Move down
-            self.current_position_y = min(self.grid_size[0] - 1,
-                                          self.current_position_y + self.steps_from_current_position[1])
-        elif action == 2:  # Move left
-            self.current_position_x = max(0, self.current_position_x - self.steps_from_current_position[1])
-        elif action == 3:  # Move right
-            self.current_position_x = min(self.grid_size[1] - 1,
-                                          self.current_position_x + self.steps_from_current_position[1])
+        # Get a hole and move
+        hole = self.get_hole(self.current_position)
 
-        # Get the new "hole" (sub-array/patch) from the current position
-        observation = self.get_hole(self.current_position_x, self.current_position_y)
-
-        # Check if the agent has completed the episode
-        done = self._is_done()
+        # Check if the episode is done
         truncated = self._is_done()
 
-        # Interpolate the field based on the dug holes
+        # Interpolate field
         self.ip_field = interpolate(self.x_coords, self.y_coords, self.ic_values, self.grid_size, method="linear")
 
-        # Calculate reward based on the current state
+        # Calculate reward
         reward = self._calc_reward()
 
-        return observation, reward, done, truncated, {"rmse": self._calc_rmse()}
+        # Calculate RMSE and stop if the RMSE is below the threshold
+        rmse = self._calc_rmse()
+        if rmse < self.rmse_threshold:
+            done = True
+        else:
+            done = truncated
 
-    def render(self) -> None:
-        """Render the environment using Matplotlib"""
+        # Ensure state is in uint8 for observation space
+        state = self.real_field.astype(np.uint8)
+
+        return state, reward, done, truncated, {"rmse": rmse}
+
+    def render(self, mode="human") -> None:
+        # Create a figure and a set of subplots
         fig, ax = plt.subplots(3, 1, figsize=(6, 12))
 
         # Plot the real field
-        ax[0].imshow(self.real_field, cmap='viridis', origin='lower')
+        ax[0].imshow(self.real_field, origin='lower')
         ax[0].set_title('Original Field')
 
         # Plot the field with holes
-        ax[1].imshow(self.field_with_holes, cmap='viridis', origin='lower')
-        ax[1].set_title('Field with Holes')
+        ax[1].imshow(self.field_with_holes, origin='lower')
+        ax[1].set_title(f'Field with Holes: {self.num_holes}')
 
         # Plot the interpolated field
-        ax[2].imshow(np.round(self.ip_field), cmap='viridis', origin='lower')
+        ax[2].imshow(self.ip_field.astype(np.uint8), origin='lower')
         ax[2].set_title('Interpolated Field')
 
         # Show the plots
@@ -155,10 +148,13 @@ class SoilEnvironment(gym.Env):
         plt.show()
 
 
-# Example usage
+# Test the environment
 data = GetFields()
-data.load_data_from_file("data/train_data_10_1.txt")  # Load data from file (or use load_data_from_arrays for arrays)
+data.load_data_from_file("generate_simulated_fields/training_data/test_data_10_1.txt")
 
 env = SoilEnvironment(data=data)
 check_env(env)
+
+
+
 
