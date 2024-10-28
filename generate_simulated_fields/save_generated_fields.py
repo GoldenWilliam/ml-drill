@@ -4,11 +4,11 @@ from generate_surface_points import generate_surface_points
 import os
 
 # Create the directory for training data if it doesn't exist
-os.makedirs("test_data", exist_ok=True)
+os.makedirs("test_data1", exist_ok=True)
 
 # Generate 800 files, each containing 10 fields
-num_files = 20
-fields_per_file = 10
+num_files = 1
+fields_per_file = 1
 
 for file_idx in range(1, num_files + 1):                               # Iterate through file numbers (1 to 80)
     # Create a filename for each file, using an iterating number

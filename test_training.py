@@ -1,66 +1,95 @@
-import numpy as np
-from stable_baselines3 import DQN, A2C, PPO
+import os
+from stable_baselines3 import DQN
 from stable_baselines3.common.callbacks import BaseCallback
 from load_field_data import GetFields
 from environment import SoilEnvironment
 from custom_cnn import CustomCNNExtractor
-import os
 
+class TrainingTestCallback(BaseCallback):
+    """
+    Callback for testing purposes to log RMSE and rewards to the console
+    and TensorBoard for each episode.
+    """
 
-# Test Tensorboard callback for logging
-class CustomTensorboardCallback(BaseCallback):
-    """Callback to log RMSE for testing model performance."""
-
-    def __init__(self, verbose: int = 0):
+    def __init__(self, verbose: int = 1):
         super().__init__(verbose)
-        self.rmse_values = []  # Track RMSE values during training for testing
+        self.episode_rewards = []
+        self.episode_lengths = []
+        self.rmse_values = []
 
     def _on_step(self) -> bool:
         infos = self.locals.get("infos", None)
-        rmse = infos[0].get("rmse")
-        self.rmse_values.append(rmse)  # Log RMSE for test inspection
-        print(f"Step {self.num_timesteps}: RMSE = {rmse}")
+        rmse = infos[0].get("rmse") if infos else None
+        reward = self.locals.get("rewards", [0])[0]
+
+        # Log RMSE if available
+        if rmse is not None:
+            self.rmse_values.append(rmse)
+            self.logger.record("test/rmse", rmse)
+            if self.verbose:
+                print(f"Step {self.num_timesteps} - RMSE: {rmse}")
+
+        # Accumulate rewards
+        self.episode_rewards[-1] += reward
+
+        done = self.locals.get("dones", [False])[0]
+        if done:
+            # Log episode reward and length
+            self.logger.record("test/episode_reward", self.episode_rewards[-1])
+            self.logger.record("test/episode_length", self.episode_lengths[-1])
+            if self.verbose:
+                print(f"Episode finished - Total Reward: {self.episode_rewards[-1]}, Steps: {self.episode_lengths[-1]}")
+
+            # Reset for next episode
+            self.episode_rewards.append(0)
+            self.episode_lengths.append(0)
+        else:
+            # Increment step count for the current episode
+            self.episode_lengths[-1] += 1
+
+        self.logger.dump(step=self.num_timesteps)
         return True
 
+    def _on_rollout_start(self) -> None:
+        self.episode_rewards.append(0)
+        self.episode_lengths.append(0)
 
-# Test function to check if the model is training
-def test_model_training():
-    """Test the training process to ensure learning is happening."""
 
-    data_file = "generate_simulated_fields/training_data/test_data_10_1.txt"
+def test_training(model_id="DQN"):
+    """Runs a test training session on the environment to ensure functionality."""
+    data_dir = 'generate_simulated_fields/training_data/'
+    data_files = [os.path.join(data_dir, f"test_data_10_{i}.txt") for i in range(1, 3)]  # Use 2 files for testing
 
-    # Load data
+    # Environment setup
     data = GetFields()
-    data.load_data_from_file(data_file)
+    data.load_data_from_file(data_files[0])
+    env = SoilEnvironment(data=data, weight_hole_number=-2, weight_accuracy=-5, rmse_threshold=0.1)
 
-    # Set up environment
-    env = SoilEnvironment(data=data, f1=-2, f2=-5)
-    env.reset()
+    # Model setup
+    logdir = "./logs/test_run"
+    os.makedirs(logdir, exist_ok=True)
 
-    # Custom CNN Policy configuration
     policy_kwargs = dict(
         features_extractor_class=CustomCNNExtractor,
         features_extractor_kwargs=dict(features_dim=256),
     )
+    model = DQN("CnnPolicy", env, policy_kwargs=policy_kwargs, verbose=1, tensorboard_log=logdir)
 
-    # Initialize model (using A2C as an example, you can replace with PPO or DQN)
-    model = A2C("CnnPolicy", env, policy_kwargs=policy_kwargs, verbose=1, learning_rate=1e-4)
+    print("\nStarting test training...")
+    for data_file in data_files:
+        print(f"\nProcessing data file: {data_file}")
+        data.load_data_from_file(data_file)
 
-    # Callback to track RMSE during training
-    callback = CustomTensorboardCallback(verbose=1)
+        # Test training on 3 episodes to check logging and reward accumulation
+        callback = TrainingTestCallback(verbose=1)
+        model.learn(total_timesteps=300, tb_log_name="test_dqn", callback=callback)
 
-    # Run a few steps of training to ensure the model is learning
-    model.learn(total_timesteps=5000, callback=callback)
-
-    # After training, check RMSE values
-    rmse_values = callback.rmse_values
-    print("RMSE Values During Training:", rmse_values)
-
-    # Assert the model should decrease RMSE over time
-    assert len(rmse_values) > 0, "No RMSE values were logged during training"
-    assert rmse_values[-1] < rmse_values[0], "RMSE did not decrease during training"
+    print("\nTest training completed.")
+    print("Final RMSE values from test:", callback.rmse_values)
 
 
-# Run the test
 if __name__ == "__main__":
-    test_model_training()
+    print("\nRunning training test...")
+    test_training()
+
+

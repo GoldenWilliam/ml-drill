@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Load the image using OpenCV
-image = cv.imread('soil_profiles/soil_profile_1.png')
+image = cv.imread('../image_processing/images/soil_profile_1.png')
 
 # Convert BGR to RGB
 image_rgb = cv.cvtColor(image, cv.COLOR_BGR2RGB)
