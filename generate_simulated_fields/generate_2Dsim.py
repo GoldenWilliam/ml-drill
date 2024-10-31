@@ -1,6 +1,5 @@
 import numpy as np
 import gempy as gp
-import gempy_viewer as gpv
 import matplotlib.pyplot as plt
 from numpy import ma  # For masking
 from generate_orientations import orientations

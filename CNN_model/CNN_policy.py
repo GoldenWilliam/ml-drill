@@ -41,7 +41,7 @@ class CustomCNN(BaseFeaturesExtractor):
  
 policy_kwargs = dict(
      features_extractor_class = CustomCNN,
-     features_extractor_kwargs=dict(features_dim=7)
+     features_extractor_kwargs=dict(features_dim=126)
  )
 
 def init_weights(m):

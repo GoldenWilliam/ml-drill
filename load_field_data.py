@@ -18,7 +18,7 @@ class GetFields():
         for block in open(filename).read().split("\n\n"):
             field = []
             for row in block.splitlines():
-                array = [int(num) for num in row]
+                array = [int(num) for num in row if num.strip()]
                 if len(array) != 0:
                     field.append(array)
 

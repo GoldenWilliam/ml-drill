@@ -5,7 +5,7 @@ sys.path.append(module_path)
 
 import multiprocessing as mp
 from CNN_enviroment import SoilEnvirment
-from CNN_policy import policy_kwargs, init_weights
+from CNN_policy import policy_kwargs
 from stable_baselines3 import DQN, A2C, PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from load_field_data import GetFields
@@ -24,8 +24,10 @@ class CustumTensorboardCallback(BaseCallback):
         infos = self.locals.get("infos",None)
         rmse = infos[0].get("rmse")
         reward = infos[0].get("reward")
+        holes = infos[0].get('holes')
         self.logger.record("testing/rmse",rmse)
         self.logger.record("testing/reward",reward)
+        self.logger.record("testing/holes",holes)
         self.logger.dump(step=self.num_timesteps)
         return True
     
@@ -78,11 +80,11 @@ def train_model(model_id: str):
 
     
     if model_id == "A2C":
-        model = A2C("CnnPolicy",env,verbose=0,tensorboard_log=logdir,policy_kwargs=policy_kwargs)
+        model = A2C("CnnPolicy",env,verbose=0,tensorboard_log=logdir)   
     if model_id == "PPO":
-        model = PPO("CnnPolicy",env,verbose=0,tensorboard_log=logdir, batch_size=10, n_steps=40,policy_kwargs=policy_kwargs)
+        model = PPO("CnnPolicy",env,verbose=0,tensorboard_log=logdir)
     if model_id == "DQN":
-        model = DQN("CnnPolicy",env,verbose=0,tensorboard_log=logdir, exploration_initial_eps=4,policy_kwargs=policy_kwargs)
+        model = DQN("CnnPolicy",env,verbose=0,tensorboard_log=logdir, buffer_size=50000)
 
     TIMESTEPS = 1000
     for i in range(0,100):
@@ -91,7 +93,7 @@ def train_model(model_id: str):
                     tb_log_name=model_id,
                     callback=CustumTensorboardCallback())
         
-        model.save(f"{models_dir}/{TIMESTEPS*i}")
+        model.save(f"{models_dir}/{TIMESTEPS*i}")     
 
 
 if __name__ == "__main__":

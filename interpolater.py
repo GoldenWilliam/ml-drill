@@ -26,7 +26,7 @@ def interpolate(x: np.array, y: np.array, values : np.array, grid_size: tuple[in
     """
     # If we only have one x-coordinate
     if len(set(x)) == 1:
-        return one_hole_interpolation(y,values,grid_size)
+        return one_hole_interpolation(x, y,values,grid_size)
     if len(x) == 0:
         return np.zeros(grid_size)
     
@@ -38,13 +38,19 @@ def interpolate(x: np.array, y: np.array, values : np.array, grid_size: tuple[in
 
     ip_field = np.where(np.isnan(ip_linaer),ip_nearest,ip_linaer)
 
-    return ip_field
+    return np.round(ip_field)
    
-def one_hole_interpolation(y: np.ndarray, values: np.ndarray, grid_size: tuple[int,int]) -> np.ndarray:
+def one_hole_interpolation(x, y: np.ndarray, values: np.ndarray, grid_size: tuple[int,int]) -> np.ndarray:
     ip_field = np.zeros(grid_size)
 
-    for i in range(len(y)):
-        ip_field[int(y[i]),:] = values[i]
+    # for i in range(len(y)):
+    #     ip_field[int(y[i]),:] = values[i]
+
+    grid_x, grid_y = np.meshgrid(np.linspace(0,grid_size[1],grid_size[1]),np.linspace(0,grid_size[0],grid_size[0]))
+    points = np.array(list(zip(x, y)))
+
+    ip_field = griddata(points,values, (grid_x,grid_y), method="nearest")
+
     
     return ip_field
 

@@ -16,18 +16,20 @@ from stable_baselines3.common.env_checker import check_env
 import matplotlib.pyplot as plt
 from interpolater import interpolate
 from load_field_data import GetFields
+import cv2
 
 
 class SoilEnvirment(gym.Env):
-    def __init__(self, data: GetFields, f1: float = -1, f2: float = -10, rmse_threshold: float = 0.7) -> None:
+    def __init__(self, data: GetFields, f1: float = -1, f2: float = 20, rmse_threshold: float = 0.7) -> None:
         super(SoilEnvirment, self).__init__()
 
         # Set konstant
         self.f1 = f1
         self.f2 = f2
         self.rmse_threshold = rmse_threshold
-        self.max_num_holes = 10
-        self.max_numbers_actions = 30
+        self.max_num_holes = 15
+        self.max_numbers_actions = 20
+
 
         # Set data
         self.data = data
@@ -39,9 +41,9 @@ class SoilEnvirment(gym.Env):
         self.positions_in_env = np.arange(0,100)
         
 
-        # Define action and ans observation space
+        # Define action and and observation space
         self.action_space = spaces.Discrete(100)
-        self.observation_space = spaces.Box(low=0,high=255,shape=(1,10,100),dtype=np.uint8)
+        self.observation_space = spaces.Box(low=0,high=255,shape=(1,36,360),dtype=np.uint8)
 
         
     def reset(self, seed: int | None = None):
@@ -55,6 +57,8 @@ class SoilEnvirment(gym.Env):
         self.ip_field = np.full_like(self.real_field, 0)
         self.current_position = 0
         self.position_map = np.zeros_like(self.real_field)
+
+        self.last_rmse = 10
 
 
         # Save holes and ic_values
@@ -72,15 +76,43 @@ class SoilEnvirment(gym.Env):
         return state, {}
     
 
+    def step(self, action: int) -> tuple[np.ndarray, float, bool, bool, dict]:
+        self.num_actions += 1
+
+        # Check if we are doing the same position again
+        # if self.positions_in_env[action] in self.x_coords:
+        #     reward = -100
+        #     state = self.make_state()
+
+        #     return state, reward, False, False, {"rmse" : self._calc_rmse(), "reward" : reward, "holes" : self.num_holes}
+        
+
+        # Change current position
+        self.current_position = self.positions_in_env[action]
+
+        # Digg hole
+        self.get_hole(self.current_position)
+
+        # Interpolate field
+        self.ip_field = interpolate(self.x_coords,self.y_coords,self.ic_values,self.grid_size,method="linear")
+
+        # Caluclate reward
+        reward = self._calc_reward()
+
+        # Update state
+        state = self.make_state()
+
+        return state, reward, self._is_done(), self._is_truncated(), {"rmse": self._calc_rmse(), "reward" : reward, "holes" : self.num_holes}
+    
     def get_hole(self, hole_x: int) -> np.ndarray | None: 
 
         # Check if agent is digging the same hole
         if self.current_position in self.x_coords:
             return None
         
-        # Checks if its out of bounds
-        if self._is_truncated():
-            return None
+        # # Checks if its out of bounds
+        # if self._is_truncated():
+        #     return None
         
         # Make position map
         self.position_map[:,hole_x] = 1
@@ -102,22 +134,27 @@ class SoilEnvirment(gym.Env):
         if self._calc_rmse() <= self.rmse_threshold:
             return True
         
-        # Check for mac number of holes
-        # if self.num_holes >= self.max_num_holes:
-        #     return True
+        # Check max number of holes
+        if self.num_holes >= self.max_num_holes:
+            return True 
+        
+        if self.num_actions >= self.max_numbers_actions:
+            return True
+        
         
         return False
     
-    def _is_truncated(self) -> bool:        
+    def _is_truncated(self) -> bool: 
+
         # Check is pososion out of grid
         if self.current_position >= self.grid_size[1] or self.current_position < 0:
             return True
         
         # Check for max number of holes
-        if self.num_holes >= self.max_num_holes:
-            return True
+        # if self.num_holes >= self.max_num_holes:
+        #     return True
 
-        # Check if number of actions is bigger than max
+        # Check for max number of actions
         if self.num_actions >= self.max_numbers_actions:
             return True
         
@@ -125,14 +162,22 @@ class SoilEnvirment(gym.Env):
     
     def _calc_reward(self) -> float:
         """Calculate reward"""
-        rmse = max(self._calc_rmse(), 0.2)
-        same_action_penalty  = -10 if self.current_position in self.x_coords else 0
+        # Cakuclate rmse
+        rmse = max(self._calc_rmse(), 0.4)
+
+        # Penalty for the same action multiple times
+        same_action_penalty  = -20 if self.current_position in self.x_coords else 0
+        loss_rmse_bonus = (self.last_rmse - rmse) * 10
         
-        reward = self.f1 * self.num_holes + self.f2*rmse + same_action_penalty
 
-        # reward = self.f1 * self.num_holes + self.f2 * rmse + same_action_penalty
+        # Reward_0 : 
+        reward = self.f1 * self.num_holes + self.f2**(1/rmse) + same_action_penalty
 
-        return reward
+        # reward = self.f1 * self.num_holes + self.f2**(1/rmse) + same_action_penalty + loss_rmse_bonus
+
+        self.last_rmse = rmse
+
+        return min(reward,400)
     
     def _calc_rmse(self) -> float:
         """Calculate rmse of interpolated field"""
@@ -140,43 +185,12 @@ class SoilEnvirment(gym.Env):
             rmse =  np.sqrt(np.mean((self.real_field - self.ip_field) ** 2))
             return rmse
         return 0
+
+    def render(self, mode: str = 'human', save_path=None) -> None:
     
-    def position_map(self) -> np.ndarray:
-        position = np.zeros(self.grid_size)
-
-        position[:,self.current_position] = 1
-        return position 
-
-
-    def step(self, action: int) -> tuple[np.ndarray, float, bool, bool, dict]:
-        self.num_actions += 1
-
-        # Check if we are doing the same position again
-        if self.current_position == self.positions_in_env[action]:
-            reward = -100
-            state = self.make_state()
-            return state, reward, False, False, {"rmse" : self._calc_rmse(), "reward" : reward}
-
-        # Digg new hole
-        self.current_position = self.positions_in_env[action]
-        self.get_hole(self.current_position)
-
-    
-        # Interpolate field
-        self.ip_field = interpolate(self.x_coords,self.y_coords,self.ic_values,self.grid_size,method="linear")
-
-        # Caluclate reward
-        reward = self._calc_reward()
-
-        # Update state
-        state = self.make_state()
-
-        return state, reward, self._is_done(), self._is_truncated(), {"rmse": self._calc_rmse(), "reward" : reward}
-
-
-    def render(self) -> None:
         # Create a figure and a set of subplots
         fig, ax = plt.subplots(3, 1, figsize=(6, 12))
+        fig.suptitle(f"Soil Envirment Rendering   |  Number of holes: {self.num_holes}  | RMSE: {self._calc_rmse():.2f}",fontsize=8)
 
         # Max and min values in the plot
         vmin = 0
@@ -187,21 +201,21 @@ class SoilEnvirment(gym.Env):
         norm = BoundaryNorm(np.arange(vmin,vmax+2), cmap.N)
 
         # Plot the first zi on the first subplot
-        contour1 = ax[0].imshow(self.real_field,cmap=cmap,norm=norm, origin='lower')
-        ax[0].set_title('Original fiels')
+        contour1 = ax[0].imshow(self.real_field,cmap=cmap,norm=norm)
+        ax[0].set_title('Original field')
         ax[0].set_xlabel('X-axis')
         ax[0].set_ylabel('Z-axis')
         fig.colorbar(contour1, ax=ax[0], ticks=np.arange(7))
 
         # Plot the second zi on the second subplot
-        contour2 = ax[1].imshow(self.field_with_holes,cmap=cmap, norm=norm, origin='lower')
+        contour2 = ax[1].imshow(self.field_with_holes,cmap=cmap, norm=norm)
         ax[1].set_title(f'Field with holes : {self.num_holes}')
         ax[1].set_xlabel('X-axis')
         ax[1].set_ylabel('Z-axis')
         fig.colorbar(contour2, ax=ax[1], ticks=np.arange(7))
 
         # Plot the second zi on the second subplot
-        contour3 = ax[2].imshow(np.round(self.ip_field),cmap=cmap, norm=norm, origin='lower')
+        contour3 = ax[2].imshow(np.round(self.ip_field),cmap=cmap, norm=norm)
         #contour3 = ax[2].imshow(np.round(self.ip_field),cmap='viridis', origin='lower', vmin=vmin, vmax=vmax)
         ax[2].set_title(f'Interpolated Field, rmse = {self._calc_rmse()}')
         ax[2].set_xlabel('X-axis')
@@ -212,34 +226,33 @@ class SoilEnvirment(gym.Env):
         plt.tight_layout()
 
         # Show the plots
-        plt.show()
+        if mode == 'human':
+            plt.show()
+        
+        elif mode == 'rgb_array':
+            fig.canvas.draw()
+            image = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+            image = image.reshape(fig.canvas.get_width_height()[::1] + (3,))
+            return image
+        
 
     def make_state(self):
         """Prøver å lage at  gjøre at matrisen har tall sprett mellom 0 og 255 så CNN-policy ikke klager"""
-        observation = np.copy(self.ip_field)
-        image_values = np.arange(0,255,255/7)
+        observation = np.copy(self.ip_field).astype(np.float32)
+
+        image_values = np.arange(100,255,155/7)
         for i in range(7):
             observation[observation == i] = image_values[i]
 
         # Legger inn 0 der vi har gravet hull
         for x in self.x_coords:
-            observation[:int(x)] = 0
-
+            observation[:,int(x)] = 0
+        
+        observation = cv2.resize(observation, (360,36),interpolation=cv2.INTER_NEAREST)
+        # plt.imshow(observation)
+        # plt.show()
 
         return np.array([observation]).astype(np.uint8)
-
-    # def resize_fields(self, fields):
-    #     resized_obs = np.zeros((36,100))
-    #     resized_obs[:self.grid_size[0],:self.grid_size[1]] = fields
-    #     return resized_obs
-    
-    # def make_observastions(self):
-    #     resize_ip_field = self.resize_fields(self.ip_field)
-    #     resize_field_with_holes = self.resize_fields(self.field_with_holes)
-    #     #resized_positions = self.resize_fields(self.position_map)
-
-    #     obs = np.stack([resize_ip_field, resize_field_with_holes]).astype(np.uint8)
-    #     return obs
 
 
     
