@@ -105,7 +105,7 @@ def train_model(model_id: str, data_files: list, rmse_threshold: float = 20.0):
         for model_index in range(10):  # Train on 10 different models within the current file
             print(f"Training model {model_index + 1} from {data_file}")
             model.learn(
-                total_timesteps=10,  # Larger value to avoid frequent resets
+                total_timesteps=100,  # Larger value to avoid frequent resets
                 reset_num_timesteps=False,
                 tb_log_name=model_id,
                 callback=callback  # Use the single callback instance

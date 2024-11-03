@@ -2,7 +2,7 @@ from PIL import Image
 import numpy as np
 
 # Load the image
-image_path = 'output_image.png'
+image_path = 'output_image3.png'
 image = Image.open(image_path).convert('RGB')  # Convert to RGB to ignore alpha channel if present
 
 # Convert the image to an RGB matrix
